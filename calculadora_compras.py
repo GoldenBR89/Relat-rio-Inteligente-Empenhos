@@ -27,7 +27,8 @@ def limpar_para_busca_agressiva(texto):
     if not isinstance(texto, str): return ""
     texto = str(texto).upper()
     texto = unicodedata.normalize('NFKD', texto).encode('ASCII', 'ignore').decode('utf-8')
-    texto = re.sub(r'\b(EMP|EMPENHO|PREFEITURA|MUNICIPAL|CAMARA|FUNDO|DE|DA|DO|LTDA|ME)\b', ' ', texto)
+    # Adicionamos SAME, FM, SMS, FMS e outros jargões na lista de ignorados!
+    texto = re.sub(r'\b(EMP|EMPENHO|PREFEITURA|MUNICIPAL|CAMARA|FUNDO|DE|DA|DO|LTDA|ME|SAME|FM|SMS|FMS|HOSPITAL|UBS|UPA)\b', ' ', texto)
     texto = re.sub(r'\d+', '', texto)
     return re.sub(r'[^A-Z]', '', texto)
 
@@ -136,6 +137,7 @@ def extrair_pedidos_pdf(caminho_pdf, estoque_conhecido, compras_transito):
     codigos_validos = set(list(estoque_conhecido.keys()) + list(compras_transito.keys()))
     empenhos = {}
     current_empenho = "Pedidos Avulsos"
+    cidade_cabecalho = "" # <-- NOVA VARIÁVEL QUE VAI GRAVAR A CIDADE REAL
     
     with pdfplumber.open(caminho_pdf) as pdf:
         for num_pag, pagina in enumerate(pdf.pages):
@@ -146,6 +148,14 @@ def extrair_pedidos_pdf(caminho_pdf, estoque_conhecido, compras_transito):
                 linha_upper = limpar_nome(linha)
                 if not linha_upper: continue
                 
+                # --- NOVIDADE: PESCAR A CIDADE REAL DO CABEÇALHO DO PDF ---
+                if "CIDADE" in linha_upper:
+                    m = re.search(r'CIDADE\s*:\s*(.*?)(?:\bBAIRRO\b|\bENDERECO\b|\bENDEREÇO\b|\bESTADO\b|$)', linha_upper)
+                    if m:
+                        cidade_extraida = m.group(1).strip()
+                        if cidade_extraida:
+                            cidade_cabecalho = cidade_extraida
+                            
                 if any(x in linha_upper for x in ["SUBTOTAL", "FRETE", "TOTAL GERAL", "DESCONTO"]):
                     continue
                     
@@ -175,16 +185,18 @@ def extrair_pedidos_pdf(caminho_pdf, estoque_conhecido, compras_transito):
                             qtd_pcs = int(partes[i])
                             break
                     
-                    # Cria o grupo do Empenho, mas NÃO ADICIONA o Computador como peça!
+                    # --- A MÁGICA DOS EMPATES ACONTECE AQUI ---
                     if current_empenho not in empenhos:
-                        empenhos[current_empenho] = {"cidade_ref": cidade_ref, "valor_total": valor_float, "qtd_pcs": qtd_pcs, "pecas": {}}
+                        # Juntamos a cidade real com o código do vendedor para não ter erro na busca!
+                        cidade_combinada = f"{cidade_cabecalho} {cidade_ref}".strip()
+                        empenhos[current_empenho] = {"cidade_ref": cidade_combinada, "valor_total": valor_float, "qtd_pcs": qtd_pcs, "pecas": {}}
                     else:
                         empenhos[current_empenho]["valor_total"] += valor_float
                         empenhos[current_empenho]["qtd_pcs"] += qtd_pcs
-                    continue # Salta para a próxima linha sem adicionar nada à lista de compras
+                    continue 
                 
                 # --- INSUMOS E PEÇAS REAIS ---
-                if partes[0].isdigit() and (partes[1].isdigit() or len(partes[1]) >= 4):
+                if partes[0].isdigit(): # <-- A NOSSA CORREÇÃO DOS SSDs MANTIDA AQUI
                     codigo_encontrado = None
                     for p in partes[:3]:
                         if p in codigos_validos:
