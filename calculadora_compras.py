@@ -27,8 +27,8 @@ def limpar_para_busca_agressiva(texto):
     if not isinstance(texto, str): return ""
     texto = str(texto).upper()
     texto = unicodedata.normalize('NFKD', texto).encode('ASCII', 'ignore').decode('utf-8')
-    # Adicionamos SAME, FM, SMS, FMS e outros jargões na lista de ignorados!
-    texto = re.sub(r'\b(EMP|EMPENHO|PREFEITURA|MUNICIPAL|CAMARA|FUNDO|DE|DA|DO|LTDA|ME|SAME|FM|SMS|FMS|HOSPITAL|UBS|UPA)\b', ' ', texto)
+    # A MÁGICA AQUI: Adicionadas as siglas de TODOS os estados para padronizar a busca!
+    texto = re.sub(r'\b(EMP|EMPENHO|PREFEITURA|MUNICIPAL|CAMARA|FUNDO|DE|DA|DO|LTDA|ME|SAME|FM|SMS|FMS|HOSPITAL|UBS|UPA|AC|AL|AP|AM|BA|CE|DF|ES|GO|MA|MT|MS|MG|PA|PB|PR|PE|PI|RJ|RN|RS|RO|RR|SC|SP|SE|TO)\b', ' ', texto)
     texto = re.sub(r'\d+', '', texto)
     return re.sub(r'[^A-Z]', '', texto)
 
